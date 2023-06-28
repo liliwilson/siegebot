@@ -27,6 +27,8 @@ jobs:
       - name: Start the app
         env: 
           SLACK_APP_TOKEN: ${{secrets.SLACK_APP_TOKEN}}
+          SLACK_BOT_TOKEN: ${{secrets.SLACK_BOT_TOKEN}}
+          SLACK_SIGNING_SECRET: ${{secrets.SLACK_SIGNING_SECRET}}
         run: node app.js 
 
       - name: Upload artifact for deployment job
