@@ -2,7 +2,9 @@ const { App } = require("@slack/bolt");
 
 require("dotenv").config();
 
-// const { scheduleBeReal } = require('./bereal');
+console.log("hi");
+
+console.log(process.env);
 
 // Initializes app with bot token and signing secret
 const app = new App({
