@@ -25,6 +25,8 @@ jobs:
         run: npm ci
 
       - name: Start the app
+        env: 
+          SLACK_APP_TOKEN: ${{secrets.SLACK_APP_TOKEN}}
         run: node app.js 
 
       - name: Upload artifact for deployment job
