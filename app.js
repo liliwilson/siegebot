@@ -81,6 +81,19 @@ app.event("message", ({ event }) => {
   }
 });
 
+app.message("!schedule", async () => {
+
+  const scheduled =
+      (await app.client.chat.scheduledMessages.list()).scheduled_messages ?? [];
+
+  const schedule = scheduled.filter(message => message.text === "it's time to BeReal!").map(message => (new Date(message.post_at * 1000)).toString());
+
+  app.client.chat.postMessage({
+    channel: "bereal",
+    text: 'next scheduled time:' + '\n' + schedule.reduce("", (prev, next) => prev + '\n' + next),
+  });
+});
+
 app.message("hi", () => {
   app.client.chat.postMessage({
     channel: "bereal",
