@@ -31,12 +31,12 @@ async function scheduleBeReal() {
       (await app.client.chat.scheduledMessages.list()).scheduled_messages ?? [];
 
     let needSchedule = true;
+    console.log("here is scheduled", scheduled);
 
     // todo make a helper func
     for (const message of scheduled) {
-      if (message.text === "it's time to BeReal! <!channel>") {
+      if (message.text.includes("it's time to BeReal!")) {
         const msgTime = new Date(message.post_at * 1000);
-
         // if they're the same day, don't redo it (convert to EST)
         first = new Date(msgTime.getTime());
         first.setHours(msgTime.getHours() - 4);
@@ -49,6 +49,7 @@ async function scheduleBeReal() {
           first.getDate() === second.getDate()
         ) {
           needSchedule = false;
+          break;
         }
       }
     }
@@ -82,12 +83,13 @@ app.event("message", ({ event }) => {
 });
 
 // command, get the next scheduled bereal times
-app.command("/schedule", async ( { command, say }) => {
+app.command("/schedule", async ({ command, say, ack }) => {
   try {
     const scheduled =
       (await app.client.chat.scheduledMessages.list()).scheduled_messages ?? [];
 
-    const schedule = scheduled.sort((a,b) => a.post_at - b.post_at)
+    const schedule = scheduled
+      .sort((a, b) => a.post_at - b.post_at)
       .filter((message) => message.text === "it's time to BeReal!")
       .map((message) => new Date(message.post_at * 1000).toString());
 
@@ -96,7 +98,26 @@ app.command("/schedule", async ( { command, say }) => {
       schedule.reduce((prev, next) => prev + "\n" + next, "");
 
     await say(message);
+    await ack();
+  } catch (error) {
+    console.error(error);
+  }
+});
 
+app.command("/clear-schedule", async ({ command, say, ack }) => {
+  try {
+    const scheduled =
+      (await app.client.chat.scheduledMessages.list()).scheduled_messages ?? [];
+
+    for (const message of scheduled) {
+      app.client.chat.deleteScheduledMessage({
+        channel: message.channel_id,
+        scheduled_message_id: message.id,
+      });
+    }
+
+    await say("cleared bereal schedule");
+    await ack();
   } catch (error) {
     console.error(error);
   }
