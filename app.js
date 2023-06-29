@@ -34,7 +34,7 @@ async function scheduleBeReal() {
 
     // todo make a helper func
     for (const message of scheduled) {
-      if (message.text === "it's time to BeReal!") {
+      if (message.text === "it's time to BeReal! <!channel>") {
         const msgTime = new Date(message.post_at * 1000);
 
         // if they're the same day, don't redo it (convert to EST)
@@ -81,17 +81,25 @@ app.event("message", ({ event }) => {
   }
 });
 
-app.message("!schedule", async () => {
-
-  const scheduled =
+// command, get the next scheduled bereal times
+app.command("/schedule", async ( { command, say }) => {
+  try {
+    const scheduled =
       (await app.client.chat.scheduledMessages.list()).scheduled_messages ?? [];
 
-  const schedule = scheduled.filter(message => message.text === "it's time to BeReal!").map(message => (new Date(message.post_at * 1000)).toString());
+    const schedule = scheduled.sort((a,b) => a.post_at - b.post_at)
+      .filter((message) => message.text === "it's time to BeReal!")
+      .map((message) => new Date(message.post_at * 1000).toString());
 
-  app.client.chat.postMessage({
-    channel: "bereal",
-    text: 'next scheduled time:' + '\n' + schedule.reduce("", (prev, next) => prev + '\n' + next),
-  });
+    const message =
+      "next scheduled time:\n" +
+      schedule.reduce((prev, next) => prev + "\n" + next, "");
+
+    await say(message);
+
+  } catch (error) {
+    console.error(error);
+  }
 });
 
 app.message("hi", () => {
