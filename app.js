@@ -1,6 +1,7 @@
 const { App , AwsLambdaReceiver } = require('@slack/bolt');
 const dotenv = require('dotenv');
 dotenv.config();
+const fs = require('fs');
 
 // Initialize your custom receiver
 const awsLambdaReceiver = new AwsLambdaReceiver({
@@ -21,73 +22,91 @@ module.exports.handler = async (event, context, callback) => {
     const handler = await awsLambdaReceiver.start();
     return handler(event, context, callback);
 }
-async function scheduleBeReal() {
-  // get new date
-  const nextMessage = new Date();
-  nextMessage.setDate(nextMessage.getDate() + 1); // for the next day
-  const randomHour = Math.floor(Math.random() * 12) + 13; // 9am to 9pm in est, this is in utc // todo check this for timezone
-  const randomMinute = Math.floor(Math.random() * 60);
-  const randomSecond = Math.floor(Math.random() * 60);
-  nextMessage.setHours(randomHour, randomMinute, randomSecond);
 
-  // nextMessage.setSeconds(nextMessage.getSeconds() + 60); // for testing purposes
-
+// given a filename, returns parsed JSON contents
+async function readJSON(filename) {
   try {
-    // check if any are scheduled already
-    const scheduled =
-      (await app.client.chat.scheduledMessages.list()).scheduled_messages ?? [];
-
-    let needSchedule = true;
-    console.log("here is scheduled", scheduled);
-
-    // todo make a helper func
-    for (const message of scheduled) {
-      if (message.text.includes("it's time to BeReal!")) {
-        const msgTime = new Date(message.post_at * 1000);
-        // if they're the same day, don't redo it (convert to EST)
-        const first = new Date(msgTime.getTime());
-        first.setHours(msgTime.getHours() - 4);
-        const second = new Date(nextMessage.getTime());
-        second.setHours(nextMessage.getHours() - 4);
-
-        if (
-          first.getFullYear() === second.getFullYear() &&
-          first.getMonth() === second.getMonth() &&
-          first.getDate() === second.getDate()
-        ) {
-          needSchedule = false;
-          break;
-        }
-      }
-    }
-
-    if (needSchedule) {
-      await app.client.chat.scheduleMessage({
-        channel: "bereal",
-        text: "it's time to BeReal!",
-        post_at: Math.floor(nextMessage.getTime() / 1000),
-      });
-
-      console.log(`scheduled next message for ${nextMessage.toString()}`);
-    } else {
-      console.log("not scheduling due to existing msg");
-    }
+    const data = await fs.promises.readFile(filename, "utf8");
+    const jsonData = JSON.parse(data);
+    return jsonData;
   } catch (error) {
-    console.error(error);
+    console.error("error reading/parsing json file:", error);
+    throw error;
   }
 }
 
-// listen for when we send the bereal message
-app.event("message", ({ event }) => {
-  if (
-    event.bot_profile !== undefined &&
-    event.bot_profile.name === "siegebot"
-  ) {
-    if (event.text.includes("it's time to BeReal!")) {
-      scheduleBeReal();
-    }
+// generate a schedule for a week of messages 
+// returns a list of numbers [0-6] that represents day offsets from the current day
+function getWeeklySchedule(startDate, timesPerWeek) {
+  // this represents offsets of the current date
+  const weekDates = [0, 1, 2, 3, 4, 5, 6];
+  const chosenDates = new Set();
+
+  // get weekend date
+  const daysUntilSat = 6 - startDate.getDay();
+  const daysUntilSun = (daysUntilSat + 1) % 7;
+  chosenDates.add(Math.random() < 0.5 ? daysUntilSat : daysUntilSun);
+
+  // fill up the rest of our dates
+  while (chosenDates.size < timesPerWeek) {
+    chosenDates.add(weekDates[Math.floor(Math.random() * weekDates.length)]);
   }
-});
+  return Array.from(chosenDates).sort();
+}
+
+// get a random prompt from promptList, remove it if removePrompt is true
+function getRandomPrompt(promptList, removePrompt) {
+  const index = Math.floor(Math.random() * promptList.length);
+  const prompt = promptList[index];
+  if (removePrompt) promptList.splice(index, 1); 
+  return prompt;
+}
+
+// add days to a date
+function addDays(startDate, days) {
+  const newDate = new Date(startDate.valueOf());
+  newDate.setDate(newDate.getDate() + days);
+  return newDate;
+}
+
+async function initialScheduling() {
+  // read prompts from the prompt_config.json file
+  const { oneTimePrompts, repeatedPrompts, timesPerWeek, probabilityRepeat } =
+    await readJSON("prompt_config.json");
+  console.log(oneTimePrompts);
+  
+  // initial date: tomorrow at 8am
+  let startDate = addDays(new Date(), 1);
+  startDate.setHours(12, 0, 0); // 12pm utc = 8am est
+
+  while (oneTimePrompts.length > 0) {
+    // generate timesPerWeek days in the next week
+    const nextTimes = getWeeklySchedule(startDate, timesPerWeek);
+
+    for (const time of nextTimes) {
+      if (oneTimePrompts.length === 0) break;
+      
+      // get a prompt randomly with probability
+      const isOneTime = Math.random() > probabilityRepeat;
+      const prompt = isOneTime ? getRandomPrompt(oneTimePrompts, true) : getRandomPrompt(repeatedPrompts, false);
+
+      // get the next time
+      const nextTime = addDays(startDate, time); // TODO make this not 8am every day
+
+      // schedule message
+      await app.client.chat.scheduleMessage({
+        channel: "bereal",
+        text: `it's time to BeSiege!\ntoday's prompt: ${prompt}`,
+        post_at: Math.floor(nextTime.getTime() / 1000),
+      });
+
+      console.log(`scheduled ${prompt} for ${nextTime.toString()}`);
+    }
+
+    // go to the next week
+    startDate = addDays(startDate, 7);
+  }
+}
 
 // command, get the next scheduled bereal times
 app.command("/schedule", async ({ command, say, ack }) => {
@@ -97,11 +116,10 @@ app.command("/schedule", async ({ command, say, ack }) => {
 
     const schedule = scheduled
       .sort((a, b) => a.post_at - b.post_at)
-      .filter((message) => message.text === "it's time to BeReal!")
       .map((message) => new Date(message.post_at * 1000).toString());
 
     const message =
-      "next scheduled time:\n" +
+      "next scheduled times:\n" +
       schedule.reduce((prev, next) => prev + "\n" + next, "");
 
     await say(message);
@@ -111,6 +129,7 @@ app.command("/schedule", async ({ command, say, ack }) => {
   }
 });
 
+// command, clear the prompt schedule
 app.command("/clear-schedule", async ({ command, say, ack }) => {
   try {
     const scheduled =
@@ -131,9 +150,10 @@ app.command("/clear-schedule", async ({ command, say, ack }) => {
 });
 
 app.message("hi", () => {
+  initialScheduling();
   app.client.chat.postMessage({
     channel: "bereal",
-    text: "it's time to BeReal! <!channel>\ndm me your pic, and i'll repost it here.",
+    text: "running initial scheduling...",
   });
 });
 

@@ -1,0 +1,11 @@
+{
+    "oneTimePrompts": [
+        "share a hot take",
+        "share a corner of ur room"
+    ], 
+    "repeatedPrompts": [
+        "share a hydration pic"
+    ],
+    "timesPerWeek": 4,
+    "probabilityRepeat": 0.2
+}
