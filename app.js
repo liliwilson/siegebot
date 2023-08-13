@@ -76,7 +76,7 @@ async function initialScheduling() {
   console.log(oneTimePrompts);
   
   // initial date: tomorrow at 8am
-  const startDate = addDays(new Date(), 1);
+  let startDate = addDays(new Date(), 1);
   startDate.setHours(12, 0, 0); // 12pm utc = 8am est
 
   while (oneTimePrompts.length > 0) {
