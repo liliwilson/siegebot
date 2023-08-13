@@ -6,8 +6,6 @@ dotenv.config();
 
 import axios from 'axios';
 
-
-
 // Initializes app with bot token and signing secret
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
@@ -41,9 +39,9 @@ async function scheduleBeReal() {
       if (message.text.includes("it's time to BeReal!")) {
         const msgTime = new Date(message.post_at * 1000);
         // if they're the same day, don't redo it (convert to EST)
-        first = new Date(msgTime.getTime());
+        const first = new Date(msgTime.getTime());
         first.setHours(msgTime.getHours() - 4);
-        second = new Date(nextMessage.getTime());
+        const second = new Date(nextMessage.getTime());
         second.setHours(nextMessage.getHours() - 4);
 
         if (
