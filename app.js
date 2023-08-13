@@ -4,8 +4,6 @@ const { App } = pkg;
 import dotenv from 'dotenv'
 dotenv.config();
 
-import axios from 'axios';
-
 // Initializes app with bot token and signing secret
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
@@ -121,42 +119,6 @@ app.command("/clear-schedule", async ({ command, say, ack }) => {
     await ack();
   } catch (error) {
     console.error(error);
-  }
-});
-
-// repost images from dms
-// TODO IS THIS GOING TO CAUSE RACE ISSUES???? is it better to just have ppl send msgs in the channel
-app.event('message', async ({ event }) => {
-  // check if the message is a direct message
-  if (event.channel_type === 'im' && event.files && event.files.length > 0) {
-    try {
-
-      const file = event.files[0];
-
-      // download the file
-      const res = await axios.get(file.url_private, {
-        headers: {
-          'Authorization': `Bearer ${process.env.SLACK_BOT_TOKEN}`
-        },
-        responseType: 'arraybuffer',
-      });
-
-      // get the username
-      const user = await app.client.users.profile.get({
-        user: file.user
-      });
-  
-      // upload file to bereal channel using the file buffer (requires files:write scope)
-      await app.client.files.uploadV2({
-        channel_id: 'C05EU7H695W', // don't hardcode this TODO
-        filename: file.name,
-        initial_comment: `here is ${user.profile.first_name}'s bereal`,
-        file: res.data,
-      });
-
-    } catch (error) {
-      console.error('Error:', error);
-    }
   }
 });
 
