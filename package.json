@@ -6,7 +6,7 @@
   "scripts": {
     "test": "mocha"
   },
-  "type": "module",
+  "type": "commonjs",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/liliwilson/siegebot.git"

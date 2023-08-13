@@ -1,18 +1,26 @@
-import pkg from '@slack/bolt';
-const { App } = pkg;
-
-import dotenv from 'dotenv'
+const { App , AwsLambdaReceiver } = require('@slack/bolt');
+const dotenv = require('dotenv');
 dotenv.config();
+
+// Initialize your custom receiver
+const awsLambdaReceiver = new AwsLambdaReceiver({
+    signingSecret: process.env.SLACK_SIGNING_SECRET,
+});
 
 // Initializes app with bot token and signing secret
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
   signingSecret: process.env.SLACK_SIGNING_SECRET,
-  socketMode: true,
   appToken: process.env.SLACK_APP_TOKEN,
   ignoreSelf: false,
+  receiver: awsLambdaReceiver,
 });
 
+// Handle the Lambda function event
+module.exports.handler = async (event, context, callback) => {
+    const handler = await awsLambdaReceiver.start();
+    return handler(event, context, callback);
+}
 async function scheduleBeReal() {
   // get new date
   const nextMessage = new Date();
