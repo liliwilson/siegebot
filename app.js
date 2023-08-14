@@ -77,7 +77,7 @@ async function initialScheduling() {
   
   // initial date: tomorrow at 8am
   let startDate = addDays(new Date(), 1);
-  startDate.setHours(12, 0, 0); // 12pm utc = 8am est
+  startDate.setHours(8, 0, 0); 
 
   while (oneTimePrompts.length > 0) {
     // generate timesPerWeek days in the next week
@@ -91,7 +91,8 @@ async function initialScheduling() {
       const prompt = isOneTime ? getRandomPrompt(oneTimePrompts, true) : getRandomPrompt(repeatedPrompts, false);
 
       // get the next time
-      const nextTime = addDays(startDate, time); // TODO make this not 8am every day
+      const nextTime = addDays(startDate, time); 
+      nextTime.setHours(8 + Math.random() * 4, Math.floor(Math.random() * 60), 0); 
 
       // schedule message
       await app.client.chat.scheduleMessage({
@@ -116,7 +117,7 @@ app.command("/schedule", async ({ command, say, ack }) => {
 
     const schedule = scheduled
       .sort((a, b) => a.post_at - b.post_at)
-      .map((message) => new Date(message.post_at * 1000).toString());
+      .map((message) => `"${message.text}" at ${new Date(message.post_at * 1000).toString()}`);
 
     const message =
       "next scheduled times:\n" +
@@ -149,12 +150,15 @@ app.command("/clear-schedule", async ({ command, say, ack }) => {
   }
 });
 
-app.message("hi", () => {
-  initialScheduling();
-  app.client.chat.postMessage({
-    channel: "bereal",
-    text: "running initial scheduling...",
-  });
+// command, initialize the prompt schedule
+app.command("/initialize", async ({ command, say, ack }) => {
+  try {
+    initialScheduling();
+    await say("running initial scheduling...");
+    await ack();
+  } catch (error) {
+    console.error(error);
+  }
 });
 
 (async () => {
