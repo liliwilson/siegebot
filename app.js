@@ -77,7 +77,7 @@ async function initialScheduling() {
   
   // initial date: tomorrow at 8am
   let startDate = addDays(new Date(), 1);
-  startDate.setHours(8, 0, 0); 
+  startDate.setHours(12, 0, 0); 
 
   while (oneTimePrompts.length > 0) {
     // generate timesPerWeek days in the next week
@@ -92,12 +92,12 @@ async function initialScheduling() {
 
       // get the next time
       const nextTime = addDays(startDate, time); 
-      nextTime.setHours(8 + Math.random() * 4, Math.floor(Math.random() * 60), 0); 
+      nextTime.setHours(12 + Math.random() * 4, Math.floor(Math.random() * 60), 0); 
 
       // schedule message
       await app.client.chat.scheduleMessage({
         channel: "bereal",
-        text: `it's time to BeSiege!\ntoday's prompt: ${prompt}`,
+        text: `it's time to BeSiege! today's prompt is: ${prompt}`,
         post_at: Math.floor(nextTime.getTime() / 1000),
       });
 
@@ -117,7 +117,7 @@ app.command("/schedule", async ({ command, say, ack }) => {
 
     const schedule = scheduled
       .sort((a, b) => a.post_at - b.post_at)
-      .map((message) => `"${message.text}" at ${new Date(message.post_at * 1000).toString()}`);
+      .map((message) => `"${message.text}" at ${new Date(message.post_at * 1000).toLocaleString('en-US', { timeZone: 'EST' })}`);
 
     const message =
       "next scheduled times:\n" +
