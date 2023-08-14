@@ -1,10 +1,24 @@
 {
     "oneTimePrompts": [
-        "share a hot take",
-        "share a corner of ur room"
+        "quick! a pic of a furry animal",
+        "a picture of nature",
+        "a pic of you with a fellow sieger", 
+        "some good food you ate today",
+        "take a picture as soon as you see this message",
+        "a wall, any wall!",
+        "a corner of your house",
+        "a part of your workday",
+        "something that is your favorite color", 
+        "something you have a collection of",
+        "share your go-to dance move",
+        "share something you are proud of today!",
+        "favorite book or movie?",
+        "favorite band (+ song recs!)"
     ], 
     "repeatedPrompts": [
-        "share a hydration pic"
+        "a picture of you hydrating!",
+        "a throwing pic from today",
+        "a pic of you stretching"
     ],
     "timesPerWeek": 4,
     "probabilityRepeat": 0.2

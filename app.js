@@ -69,26 +69,24 @@ function addDays(startDate, days) {
   return newDate;
 }
 
-async function initialScheduling() {
-  // read prompts from the prompt_config.json file
+async function schedulePrompts(startDate, promptList=[]) {
   const { oneTimePrompts, repeatedPrompts, timesPerWeek, probabilityRepeat } =
     await readJSON("prompt_config.json");
   console.log(oneTimePrompts);
-  
-  // initial date: tomorrow at 8am
-  let startDate = addDays(new Date(), 1);
-  startDate.setHours(12, 0, 0); 
 
-  while (oneTimePrompts.length > 0) {
+  // if we didn't input a prompt list, use the one from config
+  const prompts = (promptList.length === 0) ? oneTimePrompts : promptList;
+
+  while (prompts.length > 0) {
     // generate timesPerWeek days in the next week
     const nextTimes = getWeeklySchedule(startDate, timesPerWeek);
 
     for (const time of nextTimes) {
-      if (oneTimePrompts.length === 0) break;
+      if (prompts.length === 0) break;
       
       // get a prompt randomly with probability
       const isOneTime = Math.random() > probabilityRepeat;
-      const prompt = isOneTime ? getRandomPrompt(oneTimePrompts, true) : getRandomPrompt(repeatedPrompts, false);
+      const prompt = isOneTime ? getRandomPrompt(prompts, true) : getRandomPrompt(repeatedPrompts, false);
 
       // get the next time
       const nextTime = addDays(startDate, time); 
@@ -107,6 +105,14 @@ async function initialScheduling() {
     // go to the next week
     startDate = addDays(startDate, 7);
   }
+}
+
+async function initialScheduling() {
+  // set start date to be next day 8am
+  let startDate = addDays(new Date(), 1);
+  startDate.setHours(12, 0, 0); 
+
+  schedulePrompts(startDate);
 }
 
 // command, get the next scheduled bereal times
@@ -155,6 +161,28 @@ app.command("/initialize", async ({ command, say, ack }) => {
   try {
     initialScheduling();
     await say("running initial scheduling...");
+    await ack();
+  } catch (error) {
+    console.error(error);
+  }
+});
+
+
+// command, add a prompt to the schedule
+app.command("/add", async ({ command, say, ack }) => {
+  try {
+    const prompts = command.text.split(',').map((prompt) => prompt.trimStart());
+
+    const scheduled =
+      (await app.client.chat.scheduledMessages.list()).scheduled_messages ?? [];
+
+    const lastScheduled = scheduled.sort((a, b) => a.post_at - b.post_at).pop();
+    const startDate = addDays((lastScheduled === undefined) ? new Date() : new Date(lastScheduled.post_at * 1000), 1); // default to current date
+    startDate.setHours(12, 0, 0);
+
+    schedulePrompts(startDate, prompts);
+
+    await say(`inserting prompts:\n${prompts.join('\n')}`);
     await ack();
   } catch (error) {
     console.error(error);
