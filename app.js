@@ -102,7 +102,7 @@ async function schedulePrompts(startDate, promptList = []) {
         channel: "bereal",
         text: `🦛 it's time to BeSiege! 🦛\n\ntoday's prompt is: *${prompt}*`,
         post_at: Math.floor(nextTime.getTime() / 1000),
-        parse: "full"
+        parse: "full",
       });
     }
 
@@ -119,27 +119,61 @@ async function initialScheduling() {
   schedulePrompts(startDate);
 }
 
+// check if current user is admin
+async function isAdmin(userId) {
+  const channels = (
+    await app.client.conversations.list({
+      types: "public_channel,private_channel",
+    })
+  )["channels"];
+  const adminChannelId = channels.filter(
+    (val) => val.name === "siegebot-admin"
+  )[0];
+  if (!adminChannelId) {
+    throw new Error("failed to find channel");
+  } else {
+    const members = await app.client.conversations.members({
+      channel: adminChannelId.id,
+    });
+
+    if (members["ok"]) {
+      return members["members"].includes(userId);
+    } else {
+      throw new Error("failed to get members");
+    }
+  }
+}
+
 // command, get the next scheduled bereal times
 app.command("/schedule", async ({ command, say, ack }) => {
   try {
-    const scheduled =
-      (await app.client.chat.scheduledMessages.list()).scheduled_messages ?? [];
+    let responseMessage;
 
-    const schedule = scheduled
-      .sort((a, b) => a.post_at - b.post_at)
-      .map((message) => {
-        const timeString = new Date(message.post_at * 1000).toLocaleString(
-          "en-US",
-          { timeZone: "America/New_York" }
-        );
-        return `"${message.text.replace(/[\r\n]+/gm, " ")}" at ${timeString} (id: ${message.id})`;
-      });
+    if (await isAdmin(command.user_id)) {
+      const scheduled =
+        (await app.client.chat.scheduledMessages.list()).scheduled_messages ??
+        [];
 
-    const message =
-      "next scheduled times:\n" +
-      schedule.reduce((prev, next) => prev + "\n" + next, "");
+      const schedule = scheduled
+        .sort((a, b) => a.post_at - b.post_at)
+        .map((message) => {
+          const timeString = new Date(message.post_at * 1000).toLocaleString(
+            "en-US",
+            { timeZone: "America/New_York" }
+          );
+          return `"${message.text.replace(
+            /[\r\n]+/gm,
+            " "
+          )}" at ${timeString} (id: ${message.id})`;
+        });
 
-    await say(message);
+      responseMessage =
+        "next scheduled times:\n" +
+        schedule.reduce((prev, next) => prev + "\n" + next, "");
+    } else {
+      responseMessage = "you do not have permissions to run this command!";
+    }
+    await say(responseMessage);
     await ack();
   } catch (error) {
     console.error(error);
@@ -151,17 +185,25 @@ app.command("/schedule", async ({ command, say, ack }) => {
 // command, clear the prompt schedule
 app.command("/clear-schedule", async ({ command, say, ack }) => {
   try {
-    const scheduled =
-      (await app.client.chat.scheduledMessages.list()).scheduled_messages ?? [];
+    let responseMessage;
 
-    for (const message of scheduled) {
-      app.client.chat.deleteScheduledMessage({
-        channel: message.channel_id,
-        scheduled_message_id: message.id,
-      });
+    if (await isAdmin(command.user_id)) {
+      const scheduled =
+        (await app.client.chat.scheduledMessages.list()).scheduled_messages ??
+        [];
+
+      for (const message of scheduled) {
+        app.client.chat.deleteScheduledMessage({
+          channel: message.channel_id,
+          scheduled_message_id: message.id,
+        });
+      }
+      responseMessage = "cleared bereal schedule";
+    } else {
+      responseMessage = "you do not have permission to run this command!";
     }
 
-    await say("cleared bereal schedule");
+    await say(responseMessage);
     await ack();
   } catch (error) {
     console.error(error);
@@ -173,8 +215,15 @@ app.command("/clear-schedule", async ({ command, say, ack }) => {
 // command, initialize the prompt schedule
 app.command("/initialize", async ({ command, say, ack }) => {
   try {
-    initialScheduling();
-    await say("running initial scheduling...");
+    let responseMessage;
+
+    if (await isAdmin(command.user_id)) {
+      initialScheduling();
+      responseMessage = "running initial scheduling...";
+    } else {
+      responseMessage = "you do not have permission to run this command!";
+    }
+    await say(responseMessage);
     await ack();
   } catch (error) {
     console.error(error);
@@ -186,41 +235,47 @@ app.command("/initialize", async ({ command, say, ack }) => {
 // command, delete prompt(s) given a list of prompt ids
 app.command("/delete", async ({ command, say, ack }) => {
   try {
-    const messageIds = command.text.split(",").map((id) => id.trimStart());
+    let responseMessage;
 
-    const scheduled =
-      (await app.client.chat.scheduledMessages.list()).scheduled_messages ?? [];
+    if (await isAdmin(command.user_id)) {
+      const messageIds = command.text.split(",").map((id) => id.trimStart());
 
-    // if there is anything in scheduled
-    let responseString;
-    if (scheduled && messageIds.length > 0) {
-      const channel_id = scheduled[0].channel_id;
-      responseString = "deleted:\n";
-      console.log("messageids", messageIds);
-      const responses = await Promise.all(
-        messageIds.map((messageId) =>
-          app.client.chat.deleteScheduledMessage({
-            channel: channel_id,
-            scheduled_message_id: messageId,
-          })
-        )
-      );
+      const scheduled =
+        (await app.client.chat.scheduledMessages.list()).scheduled_messages ??
+        [];
 
-      responseString =
-        "deleted:\n" +
-        responses
-          .map((val, i) =>
-            val["ok"]
-              ? `successfully deleted ${messageIds[i]}`
-              : `failed to delete ${messageIds[i]}`
+      // if there is anything in scheduled
+      if (scheduled && messageIds.length > 0) {
+        const channel_id = scheduled[0].channel_id;
+        responseMessage = "deleted:\n";
+        console.log("messageids", messageIds);
+        const responses = await Promise.all(
+          messageIds.map((messageId) =>
+            app.client.chat.deleteScheduledMessage({
+              channel: channel_id,
+              scheduled_message_id: messageId,
+            })
           )
-          .join("\n");
+        );
+
+        responseMessage =
+          "deleted:\n" +
+          responses
+            .map((val, i) =>
+              val["ok"]
+                ? `successfully deleted ${messageIds[i]}`
+                : `failed to delete ${messageIds[i]}`
+            )
+            .join("\n");
+      } else {
+        responseMessage =
+          "failed to delete, no messages scheduled right now or no message IDs provided.";
+      }
     } else {
-      responseString =
-        "failed to delete, no messages scheduled right now or no message IDs provided.";
+      responseMessage = "you do not have permissions to use this command!";
     }
 
-    await say(responseString);
+    await say(responseMessage);
     await ack();
   } catch (error) {
     console.error(error);
@@ -234,23 +289,35 @@ app.command("/delete", async ({ command, say, ack }) => {
 // command, add a prompt to the schedule
 app.command("/add", async ({ command, say, ack }) => {
   try {
-    const prompts = command.text.split(",").map((prompt) => prompt.trimStart());
+    let responseMessage;
 
-    const scheduled =
-      (await app.client.chat.scheduledMessages.list()).scheduled_messages ?? [];
-    const lastScheduled = scheduled.sort((a, b) => a.post_at - b.post_at).pop();
+    if (await isAdmin(command.user_id)) {
+      const prompts = command.text
+        .split(",")
+        .map((prompt) => prompt.trimStart());
 
-    const startDate = addDays(
-      lastScheduled === undefined
-        ? new Date()
-        : new Date(lastScheduled.post_at * 1000),
-      1
-    ); // default to current date
-    startDate.setHours(12, 0, 0);
+      const scheduled =
+        (await app.client.chat.scheduledMessages.list()).scheduled_messages ??
+        [];
+      const lastScheduled = scheduled
+        .sort((a, b) => a.post_at - b.post_at)
+        .pop();
 
-    schedulePrompts(startDate, prompts);
+      const startDate = addDays(
+        lastScheduled === undefined
+          ? new Date()
+          : new Date(lastScheduled.post_at * 1000),
+        1
+      ); // default to current date
+      startDate.setHours(12, 0, 0);
 
-    await say(`inserting prompts:\n${prompts.join("\n")}`);
+      schedulePrompts(startDate, prompts);
+      responseMessage = `inserting prompts:\n${prompts.join("\n")}`;
+    } else {
+      responseMessage = "you do not have permissions to use this command!";
+    }
+
+    await say(responseMessage);
     await ack();
   } catch (error) {
     console.error(error);
@@ -263,46 +330,51 @@ app.command("/add", async ({ command, say, ack }) => {
 // takes input in the format "prompt", "yyyy-mm-dd"
 app.command("/add-on-day", async ({ command, say, ack }) => {
   try {
-    const inputs = command.text.split(",").map((val) => val.trimStart());
+    let responseMessage;
 
-    let responseString;
+    if (await isAdmin(command.user_id)) {
+      const inputs = command.text.split(",").map((val) => val.trimStart());
 
-    if (inputs.length !== 2) {
-      responseString = "command must be of the form '<prompt>, yyyy-mm-dd'";
-    } else {
-      const regex = /(?<year>\d{4})-(?<month>\d{2})-(?<day>\d{2})/;
-      const match = inputs[1].match(regex);
-
-      if (!match) {
-        responseString = "command must be of the form '<prompt>, yyyy-mm-dd'";
+      if (inputs.length !== 2) {
+        responseMessage = "command must be of the form '<prompt>, yyyy-mm-dd'";
       } else {
-        const { year, month, day } = match.groups;
+        const regex = /(?<year>\d{4})-(?<month>\d{2})-(?<day>\d{2})/;
+        const match = inputs[1].match(regex);
 
-        // pick a random time on the given date to schedule the message
-        const schedDate = new Date(
-          parseInt(year),
-          parseInt(month) - 1,
-          parseInt(day),
-          12 + Math.random() * 4,
-          Math.floor(Math.random() * 60),
-          0
-        );
+        if (!match) {
+          responseMessage =
+            "command must be of the form '<prompt>, yyyy-mm-dd'";
+        } else {
+          const { year, month, day } = match.groups;
 
-        await app.client.chat.scheduleMessage({
-          channel: "bereal",
-          text: `🦛 it's time to BeSiege! 🦛\n\ntoday's prompt is: *${inputs[0]}*`,
-          post_at: Math.floor(schedDate.getTime() / 1000),
-          parse: 'full'
-        });
+          // pick a random time on the given date to schedule the message
+          const schedDate = new Date(
+            parseInt(year),
+            parseInt(month) - 1,
+            parseInt(day),
+            12 + Math.random() * 4,
+            Math.floor(Math.random() * 60),
+            0
+          );
 
-        responseString = `inserted prompt ${
-          inputs[0]
-        } at ${schedDate.toLocaleString("en-US", {
-          timeZone: "America/New_York",
-        })}`;
+          await app.client.chat.scheduleMessage({
+            channel: "bereal",
+            text: `🦛 it's time to BeSiege! 🦛\n\ntoday's prompt is: *${inputs[0]}*`,
+            post_at: Math.floor(schedDate.getTime() / 1000),
+            parse: "full",
+          });
+
+          responseMessage = `inserted prompt ${
+            inputs[0]
+          } at ${schedDate.toLocaleString("en-US", {
+            timeZone: "America/New_York",
+          })}`;
+        }
       }
+    } else {
+      responseMessage = "you do not have permissions to use this command!";
     }
-    await say(responseString);
+    await say(responseMessage);
     await ack();
   } catch (error) {
     console.error(error);
