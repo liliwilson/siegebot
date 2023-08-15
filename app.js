@@ -104,8 +104,6 @@ async function schedulePrompts(startDate, promptList = []) {
         post_at: Math.floor(nextTime.getTime() / 1000),
         parse: "full"
       });
-
-      console.log(`scheduled ${prompt} for ${nextTime.toString()}`);
     }
 
     // go to the next week
@@ -132,7 +130,7 @@ app.command("/schedule", async ({ command, say, ack }) => {
       .map((message) => {
         const timeString = new Date(message.post_at * 1000).toLocaleString(
           "en-US",
-          { timeZone: "EST" }
+          { timeZone: "America/New_York" }
         );
         return `"${message.text.replace(/[\r\n]+/gm, " ")}" at ${timeString} (id: ${message.id})`;
       });
@@ -300,7 +298,7 @@ app.command("/add-on-day", async ({ command, say, ack }) => {
         responseString = `inserted prompt ${
           inputs[0]
         } at ${schedDate.toLocaleString("en-US", {
-          timeZone: "EST",
+          timeZone: "America/New_York",
         })}`;
       }
     }
