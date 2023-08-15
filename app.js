@@ -1,11 +1,11 @@
-const { App , AwsLambdaReceiver } = require('@slack/bolt');
-const dotenv = require('dotenv');
+const { App, AwsLambdaReceiver } = require("@slack/bolt");
+const dotenv = require("dotenv");
 dotenv.config();
-const fs = require('fs');
+const fs = require("fs");
 
 // Initialize your custom receiver
 const awsLambdaReceiver = new AwsLambdaReceiver({
-    signingSecret: process.env.SLACK_SIGNING_SECRET,
+  signingSecret: process.env.SLACK_SIGNING_SECRET,
 });
 
 // Initializes app with bot token and signing secret
@@ -19,9 +19,9 @@ const app = new App({
 
 // Handle the Lambda function event
 module.exports.handler = async (event, context, callback) => {
-    const handler = await awsLambdaReceiver.start();
-    return handler(event, context, callback);
-}
+  const handler = await awsLambdaReceiver.start();
+  return handler(event, context, callback);
+};
 
 // given a filename, returns parsed JSON contents
 async function readJSON(filename) {
@@ -35,7 +35,7 @@ async function readJSON(filename) {
   }
 }
 
-// generate a schedule for a week of messages 
+// generate a schedule for a week of messages
 // returns a list of numbers [0-6] that represents day offsets from the current day
 function getWeeklySchedule(startDate, timesPerWeek) {
   // this represents offsets of the current date
@@ -58,7 +58,7 @@ function getWeeklySchedule(startDate, timesPerWeek) {
 function getRandomPrompt(promptList, removePrompt) {
   const index = Math.floor(Math.random() * promptList.length);
   const prompt = promptList[index];
-  if (removePrompt) promptList.splice(index, 1); 
+  if (removePrompt) promptList.splice(index, 1);
   return prompt;
 }
 
@@ -69,13 +69,12 @@ function addDays(startDate, days) {
   return newDate;
 }
 
-async function schedulePrompts(startDate, promptList=[]) {
+async function schedulePrompts(startDate, promptList = []) {
   const { oneTimePrompts, repeatedPrompts, timesPerWeek, probabilityRepeat } =
     await readJSON("prompt_config.json");
-  console.log(oneTimePrompts);
 
   // if we didn't input a prompt list, use the one from config
-  const prompts = (promptList.length === 0) ? oneTimePrompts : promptList;
+  const prompts = promptList.length === 0 ? oneTimePrompts : promptList;
 
   while (prompts.length > 0) {
     // generate timesPerWeek days in the next week
@@ -83,20 +82,27 @@ async function schedulePrompts(startDate, promptList=[]) {
 
     for (const time of nextTimes) {
       if (prompts.length === 0) break;
-      
+
       // get a prompt randomly with probability
       const isOneTime = Math.random() > probabilityRepeat;
-      const prompt = isOneTime ? getRandomPrompt(prompts, true) : getRandomPrompt(repeatedPrompts, false);
+      const prompt = isOneTime
+        ? getRandomPrompt(prompts, true)
+        : getRandomPrompt(repeatedPrompts, false);
 
       // get the next time
-      const nextTime = addDays(startDate, time); 
-      nextTime.setHours(12 + Math.random() * 4, Math.floor(Math.random() * 60), 0); 
+      const nextTime = addDays(startDate, time);
+      nextTime.setHours(
+        12 + Math.random() * 4,
+        Math.floor(Math.random() * 60),
+        0
+      );
 
       // schedule message
       await app.client.chat.scheduleMessage({
         channel: "bereal",
-        text: `it's time to BeSiege! today's prompt is: ${prompt}`,
+        text: `🦛 it's time to BeSiege! 🦛\n\ntoday's prompt is: *${prompt}*`,
         post_at: Math.floor(nextTime.getTime() / 1000),
+        parse: "full"
       });
 
       console.log(`scheduled ${prompt} for ${nextTime.toString()}`);
@@ -110,7 +116,7 @@ async function schedulePrompts(startDate, promptList=[]) {
 async function initialScheduling() {
   // set start date to be next day 8am
   let startDate = addDays(new Date(), 1);
-  startDate.setHours(12, 0, 0); 
+  startDate.setHours(12, 0, 0);
 
   schedulePrompts(startDate);
 }
@@ -123,7 +129,13 @@ app.command("/schedule", async ({ command, say, ack }) => {
 
     const schedule = scheduled
       .sort((a, b) => a.post_at - b.post_at)
-      .map((message) => `"${message.text}" at ${new Date(message.post_at * 1000).toLocaleString('en-US', { timeZone: 'EST' })}`);
+      .map((message) => {
+        const timeString = new Date(message.post_at * 1000).toLocaleString(
+          "en-US",
+          { timeZone: "EST" }
+        );
+        return `"${message.text.replace(/[\r\n]+/gm, " ")}" at ${timeString} (id: ${message.id})`;
+      });
 
     const message =
       "next scheduled times:\n" +
@@ -133,6 +145,8 @@ app.command("/schedule", async ({ command, say, ack }) => {
     await ack();
   } catch (error) {
     console.error(error);
+    await say(`schedule failed with error ${error}`);
+    await ack();
   }
 });
 
@@ -153,6 +167,8 @@ app.command("/clear-schedule", async ({ command, say, ack }) => {
     await ack();
   } catch (error) {
     console.error(error);
+    await say(`clear failed with error ${error}`);
+    await ack();
   }
 });
 
@@ -164,28 +180,136 @@ app.command("/initialize", async ({ command, say, ack }) => {
     await ack();
   } catch (error) {
     console.error(error);
+    await say(`initialize failed with error ${error}`);
+    await ack();
   }
 });
 
-
-// command, add a prompt to the schedule
-app.command("/add", async ({ command, say, ack }) => {
+// command, delete prompt(s) given a list of prompt ids
+app.command("/delete", async ({ command, say, ack }) => {
   try {
-    const prompts = command.text.split(',').map((prompt) => prompt.trimStart());
+    const messageIds = command.text.split(",").map((id) => id.trimStart());
 
     const scheduled =
       (await app.client.chat.scheduledMessages.list()).scheduled_messages ?? [];
 
+    // if there is anything in scheduled
+    let responseString;
+    if (scheduled && messageIds.length > 0) {
+      const channel_id = scheduled[0].channel_id;
+      responseString = "deleted:\n";
+      console.log("messageids", messageIds);
+      const responses = await Promise.all(
+        messageIds.map((messageId) =>
+          app.client.chat.deleteScheduledMessage({
+            channel: channel_id,
+            scheduled_message_id: messageId,
+          })
+        )
+      );
+
+      responseString =
+        "deleted:\n" +
+        responses
+          .map((val, i) =>
+            val["ok"]
+              ? `successfully deleted ${messageIds[i]}`
+              : `failed to delete ${messageIds[i]}`
+          )
+          .join("\n");
+    } else {
+      responseString =
+        "failed to delete, no messages scheduled right now or no message IDs provided.";
+    }
+
+    await say(responseString);
+    await ack();
+  } catch (error) {
+    console.error(error);
+    await say(
+      `delete failed — check to make sure that your message ID is correct!`
+    );
+    await ack();
+  }
+});
+
+// command, add a prompt to the schedule
+app.command("/add", async ({ command, say, ack }) => {
+  try {
+    const prompts = command.text.split(",").map((prompt) => prompt.trimStart());
+
+    const scheduled =
+      (await app.client.chat.scheduledMessages.list()).scheduled_messages ?? [];
     const lastScheduled = scheduled.sort((a, b) => a.post_at - b.post_at).pop();
-    const startDate = addDays((lastScheduled === undefined) ? new Date() : new Date(lastScheduled.post_at * 1000), 1); // default to current date
+
+    const startDate = addDays(
+      lastScheduled === undefined
+        ? new Date()
+        : new Date(lastScheduled.post_at * 1000),
+      1
+    ); // default to current date
     startDate.setHours(12, 0, 0);
 
     schedulePrompts(startDate, prompts);
 
-    await say(`inserting prompts:\n${prompts.join('\n')}`);
+    await say(`inserting prompts:\n${prompts.join("\n")}`);
     await ack();
   } catch (error) {
     console.error(error);
+    await say(`add failed with error ${error}`);
+    await ack();
+  }
+});
+
+// command, add a prompt to the schedule
+// takes input in the format "prompt", "yyyy-mm-dd"
+app.command("/add-on-day", async ({ command, say, ack }) => {
+  try {
+    const inputs = command.text.split(",").map((val) => val.trimStart());
+
+    let responseString;
+
+    if (inputs.length !== 2) {
+      responseString = "command must be of the form '<prompt>, yyyy-mm-dd'";
+    } else {
+      const regex = /(?<year>\d{4})-(?<month>\d{2})-(?<day>\d{2})/;
+      const match = inputs[1].match(regex);
+
+      if (!match) {
+        responseString = "command must be of the form '<prompt>, yyyy-mm-dd'";
+      } else {
+        const { year, month, day } = match.groups;
+
+        // pick a random time on the given date to schedule the message
+        const schedDate = new Date(
+          parseInt(year),
+          parseInt(month) - 1,
+          parseInt(day),
+          12 + Math.random() * 4,
+          Math.floor(Math.random() * 60),
+          0
+        );
+
+        await app.client.chat.scheduleMessage({
+          channel: "bereal",
+          text: `🦛 it's time to BeSiege! 🦛\n\ntoday's prompt is: *${inputs[0]}*`,
+          post_at: Math.floor(schedDate.getTime() / 1000),
+          parse: 'full'
+        });
+
+        responseString = `inserted prompt ${
+          inputs[0]
+        } at ${schedDate.toLocaleString("en-US", {
+          timeZone: "EST",
+        })}`;
+      }
+    }
+    await say(responseString);
+    await ack();
+  } catch (error) {
+    console.error(error);
+    await say(`add failed with error ${error}`);
+    await ack();
   }
 });
 
